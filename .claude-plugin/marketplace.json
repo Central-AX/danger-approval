@@ -1,0 +1,5 @@
+{
+  "name": "central-ax-danger-approval",
+  "owner": { "name": "Central AX" },
+  "plugins": [{ "name": "danger-approval", "source": "./" }]
+}

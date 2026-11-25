@@ -1,0 +1,138 @@
+import { expect, test } from 'claude-code/testing'
+
+import { classify } from './register'
+
+const BAND = {
+  plugin: 'danger-approval',
+  component: 'AbovePrompt',
+  surface: 'desktop',
+  props: {
+    hasSurvey: false,
+    isCollapsed: false,
+    isWorking: true,
+    maxRows: 10,
+    bodyColumns: 80,
+    scroll: { offset: 0, bodyRows: 10 },
+    view: {},
+  },
+} as const
+
+test('危険な操作だけを拾う', () => {
+  expect(classify('Bash', { command: 'rm -rf build' })?.label).toBe('削除')
+  expect(classify('PowerShell', { command: 'Remove-Item x -Recurse' })?.label).toBe('削除')
+  expect(classify('Bash', { command: 'git push origin main' })?.label).toBe('git push')
+  expect(classify('Bash', { command: 'git push --force' })?.label).toBe('強制push')
+  expect(classify('mcp__abc__send_message', {})?.label).toBe('外部への送信')
+  expect(classify('mcp__abc__share_file', {})?.label).toBe('共有設定の変更')
+  expect(classify('mcp__freee__freee_api_post', {})?.label).toBe('freeeへの書き込み')
+  expect(classify('mcp__abc__trash_file', {})?.label).toBe('削除')
+
+  expect(classify('Bash', { command: 'git status' })).toBe(null)
+  expect(classify('Bash', { command: 'npm run format' })).toBe(null)
+  expect(classify('mcp__freee__freee_api_get', {})).toBe(null)
+  expect(classify('mcp__abc__search_files', {})).toBe(null)
+  expect(classify('Edit', { file_path: 'a.md' })).toBe(null)
+
+  // 長いパスはファイル名だけに縮める
+  expect(classify('Bash', { command: 'rm "/c/Users/someone/AppData/Local/Temp/x/test.txt"' })?.detail).toBe(
+    'rm "…/test.txt"',
+  )
+})
+
+test('承認なしで通った危険な操作は、実行済みとして赤で残る', async ($, on) => {
+  const toasts: string[] = []
+
+  on('tool.run', () => ({ result: {} }))
+  on('ui.toast', (_, e) => {
+    toasts.push(e.text)
+
+    return { value: undefined }
+  })
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+
+    return <Text>engine</Text>
+  })
+
+  await $.tool.run({ tool: 'Bash', tool_use_id: 't1', command: 'git status' })
+  expect(toasts.length).toBe(0)
+
+  await $.tool.run({ tool: 'Bash', tool_use_id: 't2', command: 'rm -rf build' })
+  expect(toasts.length).toBe(1)
+
+  const ui = await $.ui.mount(BAND)
+  expect((await ui.find({ type: 'Text', text: /^⚠ 自動で実行された危険な操作 1件$/ }))?.text).toBe(
+    '⚠ 自動で実行された危険な操作 1件',
+  )
+  await ui.unmount()
+})
+
+test('危険な承認のときだけ赤い帯が出て、通知が飛ぶ', async ($, on) => {
+  const notified: string[] = []
+
+  on('classic.PermissionRequest', () => ({}))
+  on('ui.notify', (_, e) => {
+    notified.push(`${e.title}|${e.text}`)
+
+    return { value: { isSent: true, channel: 'client' } }
+  })
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+
+    return <Text>engine</Text>
+  })
+
+  // ふつうの承認：帯は出ない
+  await $.classic.PermissionRequest({
+    tool_name: 'Bash',
+    tool_input: { command: 'npm test' },
+  })
+
+  let ui = await $.ui.mount(BAND)
+  expect(await ui.find({ type: 'Text', text: /危険な承認/ })).toBe(undefined)
+  await ui.unmount()
+  expect(notified.length).toBe(0)
+
+  // 危険な承認：帯と通知
+  await $.classic.PermissionRequest({
+    tool_name: 'Bash',
+    tool_input: { command: 'rm -rf build' },
+  })
+
+  ui = await $.ui.mount(BAND)
+  expect((await ui.find({ type: 'Text', text: /^⚠ 危険な承認：削除$/ }))?.text).toBe(
+    '⚠ 危険な承認：削除',
+  )
+  await ui.unmount()
+  expect(notified).toEqual(['⚠ 危険な承認|削除：rm -rf build'])
+})
+
+test('人に承認を求める判定になった危険な操作は、その時点で赤い帯と通知が出る', async ($, on) => {
+  const notified: string[] = []
+
+  on('tool.check', () => ({ decision: 'ask' }))
+  on('ui.notify', (_, e) => {
+    notified.push(`${e.title}|${e.text}`)
+
+    return { value: { isSent: true, channel: 'client' } }
+  })
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+
+    return <Text>engine</Text>
+  })
+
+  await $.tool.check({
+    tool: 'Bash',
+    input: { command: 'git push origin main' },
+    tool_use_id: 'c1',
+    approver: 'person',
+  })
+
+  const ui = await $.ui.mount(BAND)
+  expect((await ui.find({ type: 'Text', text: /^⚠ 危険な承認：git push$/ }))?.text).toBe(
+    '⚠ 危険な承認：git push',
+  )
+  await ui.unmount()
+  expect(notified).toEqual(['⚠ 危険な承認|git push：git push origin main'])
+})
