@@ -20,7 +20,7 @@ const BAND = {
 test('危険な操作だけを拾う', () => {
   expect(classify('Bash', { command: 'rm -rf build' })?.label).toBe('削除')
   expect(classify('PowerShell', { command: 'Remove-Item x -Recurse' })?.label).toBe('削除')
-  expect(classify('Bash', { command: 'git push --force' })?.label).toBe('強制push')
+  expect(classify('Bash', { command: 'git reset --hard HEAD~1' })?.label).toBe('gitの取り消せない操作')
   expect(classify('mcp__abc__send_message', {})?.label).toBe('外部への送信')
   expect(classify('mcp__abc__share_file', {})?.label).toBe('共有設定の変更')
   expect(classify('mcp__freee__freee_api_post', {})?.label).toBe('freeeへの書き込み')
@@ -30,6 +30,14 @@ test('危険な操作だけを拾う', () => {
   // ふつうの git push は赤くしない（2026-11-26 松浦）
   expect(classify('Bash', { command: 'git push origin main' })).toBe(null)
   expect(classify('Bash', { command: 'git commit -m x && git push -u origin b' })).toBe(null)
+  // GitHubへの反映（マージ・push系）も赤くしない（2026-11-26 松浦）
+  expect(classify('Bash', { command: 'gh pr merge 1 --squash' })).toBe(null)
+  expect(classify('Bash', { command: 'git push --force origin main' })).toBe(null)
+  expect(classify('mcp__github__merge_pull_request', {})).toBe(null)
+  expect(classify('mcp__github__push_files', {})).toBe(null)
+  expect(classify('mcp__github__create_or_update_file', {})).toBe(null)
+  expect(classify('Bash', { command: 'gh repo delete x/y' })?.label).toBe('GitHubの削除')
+  expect(classify('mcp__github__delete_file', {})?.label).toBe('削除')
   expect(classify('Bash', { command: 'npm run format' })).toBe(null)
   expect(classify('mcp__freee__freee_api_get', {})).toBe(null)
   expect(classify('mcp__abc__search_files', {})).toBe(null)
@@ -134,15 +142,15 @@ test('人に承認を求める判定になった危険な操作は、その時�
 
   await $.tool.check({
     tool: 'Bash',
-    input: { command: 'git push --force origin main' },
+    input: { command: 'git reset --hard HEAD~1' },
     tool_use_id: 'c1',
     approver: 'person',
   })
 
   const ui = await $.ui.mount(BAND)
-  expect((await ui.find({ type: 'Text', text: /^⚠ 危険な承認：強制push$/ }))?.text).toBe(
-    '⚠ 危険な承認：強制push',
+  expect((await ui.find({ type: 'Text', text: /^⚠ 危険な承認：gitの取り消せない操作$/ }))?.text).toBe(
+    '⚠ 危険な承認：gitの取り消せない操作',
   )
   await ui.unmount()
-  expect(notified).toEqual(['⚠ 危険な承認|強制push：git push --force origin main'])
+  expect(notified).toEqual(['⚠ 危険な承認|gitの取り消せない操作：git reset --hard HEAD~1'])
 })

@@ -14,9 +14,8 @@ const pending = atom(
 
 /** シェル（Bash / PowerShell）のコマンドに対する判定 */
 const COMMAND_RULES: readonly (readonly [RegExp, string])[] = [
-  [/\bgit\s+push\b[^\n]*(--force|-f\b)/i, '強制push'],
   [/\bgit\s+(reset\s+--hard|clean\s+-|branch\s+-D|checkout\s+--\s)/i, 'gitの取り消せない操作'],
-  [/\bgh\s+(pr\s+merge|repo\s+delete|release\s+delete)\b/i, 'GitHubのマージ・削除'],
+  [/\bgh\s+(repo\s+delete|release\s+delete)\b/i, 'GitHubの削除'],
   [/(^|[\s;&|(])(rm|rmdir|del|rd)\s/i, '削除'],
   [/\b(Remove-Item|Clear-Content|Clear-RecycleBin|Format-Volume)\b/i, '削除'],
   [/\b(wrangler\s+(deploy|publish)|vercel\b[^\n]*--prod|npm\s+run\s+deploy|clasp\s+(push|deploy))\b/i, '本番への反映'],
@@ -30,7 +29,6 @@ const TOOL_RULES: readonly (readonly [RegExp, string])[] = [
   [/(^|_)(delete|trash|remove)(_|$)|^Delete[A-Z]/, '削除'],
   [/send_message$|^slack_schedule_message$|^reply$|^forward$|chatwork.*(send|post)|post_message/i, '外部への送信'],
   [/^share_file$|^Share[A-Z]|share_connector|share_live_queries/, '共有設定の変更'],
-  [/^merge_pull_request$|^push_files$|^create_or_update_file$/, 'GitHubへの反映'],
   [/^buy_domain$|^create_or_transfer_domain$/, '購入'],
   [/^(request_promote|request_rollback|create_deployment)$/, '本番への反映'],
 ]
