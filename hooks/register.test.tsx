@@ -20,7 +20,6 @@ const BAND = {
 test('危険な操作だけを拾う', () => {
   expect(classify('Bash', { command: 'rm -rf build' })?.label).toBe('削除')
   expect(classify('PowerShell', { command: 'Remove-Item x -Recurse' })?.label).toBe('削除')
-  expect(classify('Bash', { command: 'git push origin main' })?.label).toBe('git push')
   expect(classify('Bash', { command: 'git push --force' })?.label).toBe('強制push')
   expect(classify('mcp__abc__send_message', {})?.label).toBe('外部への送信')
   expect(classify('mcp__abc__share_file', {})?.label).toBe('共有設定の変更')
@@ -28,6 +27,9 @@ test('危険な操作だけを拾う', () => {
   expect(classify('mcp__abc__trash_file', {})?.label).toBe('削除')
 
   expect(classify('Bash', { command: 'git status' })).toBe(null)
+  // ふつうの git push は赤くしない（2026-11-26 松浦）
+  expect(classify('Bash', { command: 'git push origin main' })).toBe(null)
+  expect(classify('Bash', { command: 'git commit -m x && git push -u origin b' })).toBe(null)
   expect(classify('Bash', { command: 'npm run format' })).toBe(null)
   expect(classify('mcp__freee__freee_api_get', {})).toBe(null)
   expect(classify('mcp__abc__search_files', {})).toBe(null)
@@ -39,7 +41,7 @@ test('危険な操作だけを拾う', () => {
   )
 })
 
-test('承認なしで通った危険な操作は、実行済みとして赤で残る', async ($, on) => {
+test('承認なしで通った危険な操作は、あとから赤くしない', async ($, on) => {
   const toasts: string[] = []
 
   on('tool.run', () => ({ result: {} }))
@@ -54,15 +56,23 @@ test('承認なしで通った危険な操作は、実行済みとして赤で�
     return <Text>engine</Text>
   })
 
-  await $.tool.run({ tool: 'Bash', tool_use_id: 't1', command: 'git status' })
+  await $.tool.run({ tool: 'Bash', tool_use_id: 't2', command: 'rm -rf build' })
   expect(toasts.length).toBe(0)
 
-  await $.tool.run({ tool: 'Bash', tool_use_id: 't2', command: 'rm -rf build' })
-  expect(toasts.length).toBe(1)
-
   const ui = await $.ui.mount(BAND)
-  expect((await ui.find({ type: 'Text', text: /^⚠ 自動で実行された危険な操作 1件$/ }))?.text).toBe(
-    '⚠ 自動で実行された危険な操作 1件',
+  expect(await ui.find({ type: 'Text', text: /⚠/ })).toBe(undefined)
+  await ui.unmount()
+})
+
+test('選択肢で質問してきたときは、ダイアログの上に赤い帯が出る', async $ => {
+  const ui = await $.ui.mount({
+    plugin: 'danger-approval',
+    component: 'AskUserQuestion',
+    surface: 'desktop',
+    props: { tool: 'AskUserQuestion', questions: [] },
+  })
+  expect((await ui.find({ type: 'Text', text: /^⚠ 確認が必要です/ }))?.text).toBe(
+    '⚠ 確認が必要です：選んで答えてください',
   )
   await ui.unmount()
 })
@@ -124,15 +134,15 @@ test('人に承認を求める判定になった危険な操作は、その時�
 
   await $.tool.check({
     tool: 'Bash',
-    input: { command: 'git push origin main' },
+    input: { command: 'git push --force origin main' },
     tool_use_id: 'c1',
     approver: 'person',
   })
 
   const ui = await $.ui.mount(BAND)
-  expect((await ui.find({ type: 'Text', text: /^⚠ 危険な承認：git push$/ }))?.text).toBe(
-    '⚠ 危険な承認：git push',
+  expect((await ui.find({ type: 'Text', text: /^⚠ 危険な承認：強制push$/ }))?.text).toBe(
+    '⚠ 危険な承認：強制push',
   )
   await ui.unmount()
-  expect(notified).toEqual(['⚠ 危険な承認|git push：git push origin main'])
+  expect(notified).toEqual(['⚠ 危険な承認|強制push：git push --force origin main'])
 })

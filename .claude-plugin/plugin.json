@@ -1,7 +1,7 @@
 {
   "name": "danger-approval",
-  "version": "0.2.0",
-  "description": "危険な操作（削除・push・外部送信など）のときだけ、入力欄の上に赤い帯と専用の通知を出す",
+  "version": "0.3.0",
+  "description": "危険な操作（削除・強制push・外部送信など）のときだけ、入力欄の上に赤い帯と専用の通知を出す",
   "author": { "name": "Central AX" },
   "license": "MIT",
   "types": "./types/index.d.ts"

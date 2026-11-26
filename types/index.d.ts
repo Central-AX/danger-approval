@@ -12,8 +12,6 @@ declare module 'claude-code' {
     'danger-approval': {
       /** いま承認待ちの危険な操作 */
       pending: Danger | null
-      /** 承認を求められずに自動で実行された危険な操作（次の入力まで残す） */
-      auto: Danger[]
     }
   }
 }

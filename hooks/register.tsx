@@ -7,7 +7,6 @@ const pending = atom(
   { plugin: 'danger-approval', key: 'pending' } as const,
   null,
 )
-const auto = atom({ plugin: 'danger-approval', key: 'auto' } as const, [])
 
 
 // ── 危険の判定 ────────────────────────────────────────────
@@ -17,7 +16,6 @@ const auto = atom({ plugin: 'danger-approval', key: 'auto' } as const, [])
 const COMMAND_RULES: readonly (readonly [RegExp, string])[] = [
   [/\bgit\s+push\b[^\n]*(--force|-f\b)/i, '強制push'],
   [/\bgit\s+(reset\s+--hard|clean\s+-|branch\s+-D|checkout\s+--\s)/i, 'gitの取り消せない操作'],
-  [/\bgit\s+push\b/i, 'git push'],
   [/\bgh\s+(pr\s+merge|repo\s+delete|release\s+delete)\b/i, 'GitHubのマージ・削除'],
   [/(^|[\s;&|(])(rm|rmdir|del|rd)\s/i, '削除'],
   [/\b(Remove-Item|Clear-Content|Clear-RecycleBin|Format-Volume)\b/i, '削除'],
@@ -190,18 +188,8 @@ export const register: Register = on => {
       await update($, pending, () => null)
     }
 
-    // 承認を求められずに通った危険な操作は、実行したことを赤で残す
-    const danger = classify(e.tool, e)
-    const wasAsked =
-      now !== null || (e.tool_use_id !== undefined && asked.has(e.tool_use_id))
-
-    if (danger !== null && !wasAsked) {
-      await update($, auto, list => [...list, danger].slice(-20))
-      $.ui.toast(`⚠ 危険な操作を自動で実行：${danger.label}　${danger.detail}`, {
-        timeoutMs: 10000,
-      })
-    }
-
+    // 承認を求められずに通った危険な操作は赤くしない。
+    // 終わったあとに赤を出しても、もう選べることがないため（2026-11-26 松浦）。
     return next(e)
   })
 
@@ -224,10 +212,6 @@ export const register: Register = on => {
   })
 
   on('prompt.submit', async ($, e, next) => {
-    if ((await read($, auto)).length > 0) {
-      await update($, auto, () => [])
-    }
-
     if ((await read($, pending)) !== null) {
       await update($, pending, () => null)
     }
@@ -237,28 +221,12 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const danger = await read($, pending)
-    const ran = await read($, auto)
 
-    if (e.props.hasSurvey || (danger === null && ran.length === 0)) {
+    if (e.props.hasSurvey || danger === null) {
       return next(e)
     }
 
     const { Box, Text } = $.ui.resolve(e)
-
-    if (danger === null) {
-      const latest = ran[ran.length - 1]
-
-      return (
-        <Box backgroundColor="#7f1d1d" paddingX={1}>
-          <Text color="#ffffff">
-            <Text color="#ffffff" bold>
-              ⚠ 自動で実行された危険な操作 {ran.length}件
-            </Text>
-            {` ｜ 最新：${latest?.label ?? ''} ｜ ${latest?.detail ?? ''}`}
-          </Text>
-        </Box>
-      )
-    }
 
     return (
       <Box backgroundColor="#b91c1c" paddingX={1}>
@@ -268,6 +236,24 @@ export const register: Register = on => {
           </Text>
           {` ｜ ${danger.detail}`}
         </Text>
+      </Box>
+    )
+  })
+
+  // Claude が選択肢で質問してきたとき（AskUserQuestion）は、答えが要る場面なので赤い帯を出す。
+  // 帯はダイアログの上に1行だけ。ダイアログ本体は engine のまま。
+  on('ui.render', { component: 'AskUserQuestion' }, async ($, e, next) => {
+    const dialog = await next(e)
+    const { Box, Text } = $.ui.resolve(e)
+
+    return (
+      <Box flexDirection="column">
+        <Box backgroundColor="#b91c1c" paddingX={1}>
+          <Text color="#ffffff" bold>
+            ⚠ 確認が必要です：選んで答えてください
+          </Text>
+        </Box>
+        {dialog}
       </Box>
     )
   })
