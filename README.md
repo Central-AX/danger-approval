@@ -32,7 +32,7 @@ Claude Code 2.1.330 と、そのデスクトップアプリで動作を確認し
 ## 「危険」に入っているもの
 
 - 削除：`rm`、`Remove-Item`、`del`、各種ツールの delete / trash
-- git：強制push、`reset --hard`、`clean`、`branch -D`、`gh pr merge`（ふつうの `git push` は入れない）
+- git：`reset --hard`、`clean`、`branch -D`、`gh repo delete`・`gh release delete`（`git push`（強制pushを含む）と、GitHubへの反映＝`gh pr merge`・PRのマージ・ファイルのpushは入れない）
 - 外部への送信：メール・チャットの送信、返信、転送、予約投稿
 - 共有設定の変更：ファイル共有など
 - 会計ソフトへの書き込み：freee の読み取り以外
